@@ -1,0 +1,12 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const {server,extractResponseText}=require('../server');
+let base;
+test.before(async()=>{await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));base=`http://127.0.0.1:${server.address().port}`;});
+test.after(()=>new Promise(resolve=>server.close(resolve)));
+test('serves website',async()=>{const r=await fetch(base);assert.equal(r.status,200);assert.match(await r.text(),/Cior IDE/);});
+test('serves JS and CSS',async()=>{for(const p of ['/app.js','/styles.css']){const r=await fetch(base+p);assert.equal(r.status,200);assert.ok((await r.text()).length>1000);}});
+test('health does not expose secrets',async()=>{const r=await fetch(base+'/api/health');const body=await r.json();assert.equal(body.ok,true);assert.equal(typeof body.aiEnabled,'boolean');assert.equal(body.key,undefined);});
+test('AI clearly responds when not configured',async()=>{if(process.env.OPENAI_API_KEY)return;const r=await fetch(base+'/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:'Привет'})});assert.equal(r.status,503);assert.match((await r.json()).error,/не подключён/);});
+test('missing path returns 404',async()=>{const r=await fetch(base+'/absent.js');assert.equal(r.status,404);});
+test('response extractor',()=>{assert.equal(extractResponseText({output:[{content:[{type:'output_text',text:'Привет'}]}]}),'Привет');});
